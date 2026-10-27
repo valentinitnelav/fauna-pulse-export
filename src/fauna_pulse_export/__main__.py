@@ -82,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="replace sessions that were exported to this folder before")
     a.add_argument("--device-id", metavar="NAME",
                    help="device name for sessions that carry none (imported videos; default: "
-                   "'unknown camera'). A 'Device ID' field in the session's field notes, "
-                   "FaunaLapse's phone ID and the phone model come first")
+                   "'unknown camera'). The Device ID of the session's field notes, an own "
+                   "field named 'Device ID', FaunaLapse's phone ID and the phone model come first")
     a.set_defaults(func=_insect_detect)
 
     c = sub.add_parser("compare", help="FaunaPulse's and insect-detect-post's names per track ID")

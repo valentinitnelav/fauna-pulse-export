@@ -293,9 +293,10 @@ def _float(v) -> float | None:
 # unknown unless the user names it (--device-id).
 UNKNOWN_DEVICE = "unknown camera"
 
-# A field of the user's own with this name (Field notes, "+ Add a field", in both apps; FaunaLapse's
-# help suggests it) names the device, as the camera's hostname does. Matched without case, spaces,
-# "_" or "-", so "device_id" and "Device-ID" count too.
+# The Field notes' Device ID (`field.device_id`, FaunaPulse after 0.9.0-beta.1) names the device, as
+# the camera's hostname does. A field of the user's own with this name ("+ Add a field"; FaunaLapse's
+# help suggests one) names it too; matched without case, spaces, "_" or "-", so "device_id" and
+# "Device-ID" count as well.
 DEVICE_ID_FIELD = "Device ID"
 
 
@@ -343,7 +344,8 @@ def phone_model_of(start: dict) -> str | None:
 
 
 def device_id_of(start: dict, fallback: str | None = None) -> tuple[str, str]:
-    """The device's name in the export and where it came from: the first filled "Device ID" field, else
+    """The device's name in the export and where it came from: the field notes' Device ID
+    (`field.device_id`), else the first filled field of the user's own named "Device ID", else
     FaunaLapse's phone ID (`field.phone_id`, 8 characters of Android's ID; always empty in
     FaunaPulse), else the phone model, else [fallback] (--device-id), else UNKNOWN_DEVICE.
 
@@ -354,7 +356,9 @@ def device_id_of(start: dict, fallback: str | None = None) -> tuple[str, str]:
     notes = start.get("field") if isinstance(start.get("field"), dict) else {}
     custom = notes.get("custom") if isinstance(notes.get("custom"), dict) else {}
     own = next((n for k, v in custom.items() if _plain(k) == _plain(DEVICE_ID_FIELD) and (n := _safe(_text(v)))), "")
-    for name, source in ((own, "field " + DEVICE_ID_FIELD), (_safe(_text(notes.get("phone_id"))), "phone ID"),
+    for name, source in ((_safe(_text(notes.get("device_id"))), DEVICE_ID_FIELD),
+                         (own, "own field " + DEVICE_ID_FIELD),
+                         (_safe(_text(notes.get("phone_id"))), "phone ID"),
                          (_safe(phone_model_of(start)), "phone model"), (_safe(_text(fallback)), "--device-id")):
         if name:
             return name, source

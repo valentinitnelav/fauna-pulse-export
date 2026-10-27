@@ -392,8 +392,9 @@ class ReviewFindingsTest(unittest.TestCase):
 
 
 class DeviceNameTest(unittest.TestCase):
-    """Device name rule (owner's choice 2026-10-27): the user's "Device ID" field, FaunaLapse's
-    phone ID, the phone model, --device-id, "unknown camera"."""
+    """Device name rule (owner's choice 2026-10-27, Device ID field 2026-10-28): the field notes'
+    Device ID, an own field of that name, FaunaLapse's phone ID, the phone model, --device-id,
+    "unknown camera"."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -404,18 +405,19 @@ class DeviceNameTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def session(self, name, custom=None, phone_id=None, model=True):
+    def session(self, name, custom=None, phone_id=None, model=True, device_id=None):
         start = start_record()
-        start["field"] = dict(start["field"], phone_id=phone_id, custom=custom or {})
+        start["field"] = dict(start["field"], device_id=device_id, phone_id=phone_id, custom=custom or {})
         if not model:
             del start["device"]
         return make_session(self.root, name, [start, frame(self.t, track(1, jpeg=self.p))], [self.p])
 
     def test_order_of_the_sources(self):
         cases = [
+            (dict(device_id="cam-03", custom={"Device ID": "cam-99"}), None, ("cam-03", "Device ID")),
             (dict(custom={"device_id": " plot 3 / A ", "Notes": "x"}, phone_id="3F9A12C0"),
-             None, ("plot 3 - A", "field Device ID")),
-            (dict(custom={"Device ID": 7.0}), None, ("7", "field Device ID")),
+             None, ("plot 3 - A", "own field Device ID")),
+            (dict(custom={"Device ID": 7.0}), None, ("7", "own field Device ID")),
             (dict(custom={"Device ID": True}, phone_id="3F9A12C0"), None, ("3F9A12C0", "phone ID")),
             (dict(custom={"Device ID": ""}), "GoPro 1", ("Redmi Note 9S", "phone model")),
             (dict(model=False), "GoPro 1", ("GoPro 1", "--device-id")),
@@ -426,15 +428,15 @@ class DeviceNameTest(unittest.TestCase):
             self.assertEqual((s.device_id, s.device_id_source), want, kw)
 
     def test_export_writes_the_name_and_compare_finds_it(self):
-        d = self.session("plot1", custom={"Device ID": "cam-03"})
+        d = self.session("plot1", device_id="cam-03")
         entry = write_session(read_session(d), Export(self.root / "out"), Options())
-        self.assertEqual(entry["device_id_source"], "field Device ID")
+        self.assertEqual(entry["device_id_source"], "Device ID")
         folder = Path(entry["folder"])
         self.assertEqual(folder.parts[-4], "cam-03")
         with open(next(folder.glob("*_metadata.csv")), newline="") as f:
             self.assertEqual({r["device_id"] for r in csv.DictReader(f)}, {"cam-03"})
         cfg = json.loads(next(folder.glob("*_config.json")).read_text())
-        self.assertEqual(cfg["faunapulse"]["device_id_source"], "field Device ID")
+        self.assertEqual(cfg["faunapulse"]["device_id_source"], "Device ID")
         # tracks_<pack>.csv holds the phone model; compare uses the export's name instead.
         (d / "identification").mkdir()
         (d / "identification" / "tracks_p.csv").write_text(

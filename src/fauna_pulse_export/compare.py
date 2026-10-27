@@ -7,7 +7,7 @@ track ID, written on the computer from the exported photos) share the taxon colu
 session ID are the ones the export wrote (device name rule, folder name + token), worked out again
 from the session folder: `tracks_<pack>.csv` of app versions up to 0.9.0-beta.1 holds the phone
 model as device_id, a session without a device name has none (the export may name it with
---device-id), and every one keeps the name the folder had when Identify ran. The two answers are computed differently (see README), so this compares
+--device-id), and every one keeps the name the folder had when Identify ran. The two answers are computed differently (see docs/COMPARING.md), so this compares
 them; it does not say which one is right.
 """
 
