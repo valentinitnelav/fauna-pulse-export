@@ -3,9 +3,11 @@
 FaunaPulse's `identification/tracks_<pack>.csv` (one row per track ID, written on the phone by
 "Identify organisms") and insect-detect-post's `metadata/*_classified_final.csv` (one row per
 track ID, written on the computer from the exported photos) share the taxon columns
-(`bioclip_<rank>`) and the key (`device_id`, `session_id`, `track_id`); the session ID is the one
-the export wrote (folder name + token), worked out again from the session folder. The two answers are computed differently (see README), so
-this compares them; it does not say which one is right.
+(`bioclip_<rank>`) and the key (`device_id`, `session_id`, `track_id`). The device name and the
+session ID are the ones the export wrote (device name rule, folder name + token), worked out again
+from the session folder, because `tracks_<pack>.csv` holds only the phone model and the name the
+folder had at Identify. The two answers are computed differently (see README), so this compares
+them; it does not say which one is right.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ import csv
 import re
 from pathlib import Path
 
-from .session_reader import SESSION_LOG, UNKNOWN_DEVICE, export_session_id, read_start
+from .session_reader import SESSION_LOG, UNKNOWN_DEVICE, device_id_of, export_session_id, read_start
 
 RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
 
@@ -44,8 +46,10 @@ def _int(text) -> int | None:
         return None
 
 
-def read_faunapulse(session_dirs: list[Path], pack: str | None) -> tuple[dict, list[str]]:
-    """{track key: row} and notes about sessions without results."""
+def read_faunapulse(session_dirs: list[Path], pack: str | None,
+                    device_id: str | None = None) -> tuple[dict, list[str]]:
+    """{track key: row} and notes about sessions without results. [device_id]: the --device-id
+    given to the export, for sessions without a device name of their own."""
     out: dict[tuple[str, str, int], dict] = {}
     notes: list[str] = []
     for d in map(Path, session_dirs):
@@ -59,17 +63,18 @@ def read_faunapulse(session_dirs: list[Path], pack: str | None) -> tuple[dict, l
         if len(files) > 1:
             names = ", ".join(f.stem.removeprefix("tracks_") for f in files)
             raise CompareError(f"{d.name} has results for several packs ({names}): choose one with --pack")
-        # The session ID the export wrote (folder name + token), from the folder as it is now:
-        # a session renamed after Identify keeps its old name in the CSV's session_id.
-        start = read_start(d / SESSION_LOG) if (d / SESSION_LOG).is_file() else None
-        session_id = export_session_id(d.name, start or {})
+        # The device name and session ID the export wrote, from the folder as it is now: a session
+        # renamed after Identify keeps its old name in the CSV's session_id.
+        start = (read_start(d / SESSION_LOG) if (d / SESSION_LOG).is_file() else None) or {}
+        session_id = export_session_id(d.name, start)
+        device = device_id_of(start, device_id)[0]
         for row in _rows(files[0]):
             members = [_int(m) for m in (row.get("merged_track_ids") or "").split(";")]
             members = [m for m in members if m is not None] or [_int(row.get("track_id"))]
             for m in members:
                 if m is None:  # a crop without a track ID (no-AI photo): nothing to compare
                     continue
-                out[_key(row.get("device_id"), session_id, m)] = dict(
+                out[_key(device, session_id, m)] = dict(
                     row, _merged="1" if len(members) > 1 else "", _session_id=session_id)
     return out, notes
 

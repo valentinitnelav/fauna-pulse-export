@@ -10,8 +10,9 @@ the app (https://github.com/valentinitnelav/fauna-pulse):
   (`_IndexBuilder._apply`, `_addPhotoEntry`, `_readCapture`);
 - which file is read and which box is used: `lib/fauna_pulse/identification/crop_planner.dart`
   (`planFromIndex`);
-- device and session IDs: `lib/fauna_pulse/identification/identification_job.dart`
-  (the values written to `tracks_<pack>.csv`, so results can be joined).
+- phone model and session IDs: `lib/fauna_pulse/identification/identification_job.dart`
+  (the values written to `tracks_<pack>.csv`, so results can be joined); the device name the
+  export writes is in `device_id_of` (a "Device ID" field of the user's own comes first).
 
 The record dictionary is the app's `docs/DATA_GUIDE.md`. Two deliberate differences from the
 planner: every photo is kept (the planner keeps at most 10 per track ID for Identify), and a
@@ -76,6 +77,7 @@ class Session:
     folder: Path
     session_id: str
     device_id: str
+    device_id_source: str  # see device_id_of
     start: dict
     track_source: str  # 'live' or 'afterwards'
     post_track_start: dict | None
@@ -283,26 +285,61 @@ def _float(v) -> float | None:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
-# insect-detect-post drops every row whose device_id is empty, so a session without a phone model
-# gets this name (compare.py maps the empty device_id of tracks_<pack>.csv to it too). Imported
-# videos have none: the phone did not film them, so the camera is unknown.
+# insect-detect-post drops every row whose device_id is empty, so a session without any device
+# name gets this one. Imported videos have none: the phone did not film them, so the camera is
+# unknown unless the user names it (--device-id).
 UNKNOWN_DEVICE = "unknown camera"
 
+# A field of the user's own with this name (Field notes, "+ Add a field", in both apps; FaunaLapse's
+# help suggests it) names the device, as the camera's hostname does. Matched without case, spaces,
+# "_" or "-", so "device_id" and "Device-ID" count too.
+DEVICE_ID_FIELD = "Device ID"
 
-def device_id_of(start: dict) -> str:
-    """Mirrors identification_job.dart: `device.model`, else `device_model`, else UNKNOWN_DEVICE."""
+
+# insect-detect-post makes a folder `<device_id>_<session_id>_ID<track>` for each track ID when it
+# sorts the crops (pipeline_runner.py), so a typed name must not hold what file names cannot.
+_NOT_IN_FILE_NAMES = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def _plain(name) -> str:
+    return re.sub(r"[\s_-]+", "", str(name)).lower()
+
+
+def _text(v) -> str | None:
+    if v is None or isinstance(v, bool):  # a yes/no field is no name
+        return None
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v).strip() or None
+
+
+def phone_model_of(start: dict) -> str | None:
+    """Mirrors identification_job.dart: `device.model`, else `device_model` (the device_id of
+    tracks_<pack>.csv)."""
     d = start.get("device")
-    if isinstance(d, dict) and d.get("model") is not None and str(d["model"]).strip():
-        return str(d["model"])
-    model = start.get("device_model")
-    return str(model) if model is not None and str(model).strip() else UNKNOWN_DEVICE
+    return _text(d.get("model") if isinstance(d, dict) else None) or _text(start.get("device_model"))
+
+
+def device_id_of(start: dict, fallback: str | None = None) -> tuple[str, str]:
+    """The device's name in the export and where it came from: the user's "Device ID" field, else
+    FaunaLapse's phone ID (`field.phone_id`, 8 characters of Android's ID; always empty in
+    FaunaPulse), else the phone model, else [fallback] (--device-id), else UNKNOWN_DEVICE."""
+    notes = start.get("field") if isinstance(start.get("field"), dict) else {}
+    custom = notes.get("custom") if isinstance(notes.get("custom"), dict) else {}
+    own = next((_text(v) for k, v in custom.items() if _plain(k) == _plain(DEVICE_ID_FIELD)), None)
+    for name, source in ((own, "field " + DEVICE_ID_FIELD), (_text(notes.get("phone_id")), "phone ID"),
+                         (phone_model_of(start), "phone model"), (_text(fallback), "--device-id")):
+        name = _NOT_IN_FILE_NAMES.sub("-", name or "").strip(" .")
+        if name:
+            return name, source
+    return UNKNOWN_DEVICE, "none"
 
 
 def export_session_id(folder_name: str, start: dict) -> str:
     """The session's ID in the export: its folder name plus the session token (`file_token`).
 
-    insect-detect-post keys a track by (device_id, session_id, track_id) and device_id is only the
-    phone model, so two phones of the same model with the same folder name (a study naming its
+    insect-detect-post keys a track by (device_id, session_id, track_id) and device_id is often only
+    the phone model, so two phones of the same model with the same folder name (a study naming its
     sessions "plot1" on every phone, or the default "session") would have their tracks merged.
     The token is drawn at random per session (4 base-36 characters, session_recorder.dart).
     """
@@ -310,7 +347,8 @@ def export_session_id(folder_name: str, start: dict) -> str:
     return f"{folder_name}_{token}" if isinstance(token, str) and token else folder_name
 
 
-def read_session(folder: Path) -> Session:
+def read_session(folder: Path, device_id: str | None = None) -> Session:
+    """[device_id] names the device of a session that carries no name of its own (--device-id)."""
     folder = Path(folder).resolve()  # "." would otherwise give an empty session name
     log = folder / SESSION_LOG
     if not log.is_file():
@@ -354,10 +392,12 @@ def read_session(folder: Path) -> Session:
             raise SessionError("its photos have boxes but no track IDs yet: in the app, run "
                                "Find track IDs in the photos first, then export again")
         raise SessionError("no saved photo with a track ID")
+    device, device_source = device_id_of(start, device_id)
     return Session(
         folder=folder,
         session_id=export_session_id(folder.name, start),
-        device_id=device_id_of(start),
+        device_id=device,
+        device_id_source=device_source,
         start=start,
         track_source="afterwards" if afterwards else "live",
         post_track_start=b.post_track_start,

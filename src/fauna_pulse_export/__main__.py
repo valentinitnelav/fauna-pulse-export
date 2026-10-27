@@ -26,7 +26,7 @@ def _insect_detect(args) -> int:
     report = []
     for folder in sessions:
         try:
-            entry = write_session(read_session(folder), export, opts)
+            entry = write_session(read_session(folder, args.device_id), export, opts)
         except SessionError as e:
             entry = {"session": folder.name, "refused": str(e)}
         report.append(entry)
@@ -35,7 +35,8 @@ def _insect_detect(args) -> int:
             continue
         skipped = ", ".join(f"{k} {v}" for k, v in entry["skipped"].items() if v)
         print(f"{entry['session']}: {entry['photos']} photos, {entry['rows']} rows, "
-              f"{entry['track_ids']} track IDs ({entry['track_source']})"
+              f"{entry['track_ids']} track IDs ({entry['track_source']}), "
+              f"device '{entry['device_id']}' ({entry['device_id_source']})"
               + (f"; left out: {skipped}" if skipped else ""))
     out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -49,7 +50,7 @@ def _insect_detect(args) -> int:
 
 def _compare(args) -> int:
     try:
-        fp, notes = read_faunapulse(find_sessions(args.faunapulse), args.pack)
+        fp, notes = read_faunapulse(find_sessions(args.faunapulse), args.pack, args.device_id)
         rows, summary = compare(fp, read_post(Path(args.post)))
         write_csv(rows, Path(args.out))
     except CompareError as e:
@@ -79,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="leave the session's position out of the config file")
     a.add_argument("--overwrite", action="store_true",
                    help="replace sessions that were exported to this folder before")
+    a.add_argument("--device-id", metavar="NAME",
+                   help="device name for sessions that carry none (imported videos; default: "
+                   "'unknown camera'). A 'Device ID' field in the session's field notes, "
+                   "FaunaLapse's phone ID and the phone model come first")
     a.set_defaults(func=_insect_detect)
 
     c = sub.add_parser("compare", help="FaunaPulse's and insect-detect-post's names per track ID")
@@ -87,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--post", required=True,
                    help="insect-detect-post run folder (data_processed/<run>) or its _final.csv")
     c.add_argument("--pack", help="name list of the FaunaPulse results, when a session has several")
+    c.add_argument("--device-id", metavar="NAME",
+                   help="the --device-id given to insect-detect, if any")
     c.add_argument("--out", default="comparison.csv", help="output CSV (default: comparison.csv)")
     c.set_defaults(func=_compare)
 

@@ -30,11 +30,16 @@ wherever `fauna-pulse-export` is written below.
 ## From FaunaPulse to insect-detect-post
 
 1. *Optional, needed for the comparison:* in FaunaPulse, run **Identify organisms** on the sessions.
-2. Copy the session folders to the computer: connect the phone by USB and copy them from
+2. *Recommended when several phones record:* give each phone a name, as the Insect Detect camera
+   has its hostname. Open the field notes (FaunaPulse: on the camera screen, the pin with a
+   pencil; FaunaLapse: card 2, *Field metadata*), tap **Add a field**, call it `Device ID` and type the
+   name, for example `cam-03`. Both apps keep the field and its value for the next sessions. Without it, insect-detect-post sees only the phone model, so phones of the same
+   model look like one device in its results.
+3. Copy the session folders to the computer: connect the phone by USB and copy them from
    `Android/data/com.faunapulse.app/files/sessions/` (see the app's
    [FIELD_GUIDE.md](https://github.com/valentinitnelav/fauna-pulse/blob/main/docs/FIELD_GUIDE.md)).
    Keep the originals: the export never changes them.
-3. Export:
+4. Export:
 
    ```bash
    fauna-pulse-export insect-detect path/to/sessions --out path/to/for_insect_detect
@@ -43,11 +48,11 @@ wherever `fauna-pulse-export` is written below.
    You can name single session folders or folders that hold them. Each session gets one line on
    screen (photos, rows, track IDs, anything left out and why), and `export_report_<time>.json`
    in the output folder keeps the same.
-4. In insect-detect-post, select `path/to/for_insect_detect` as the source directory and run the
+5. In insect-detect-post, select `path/to/for_insect_detect` as the source directory and run the
    pipeline as for camera data. Its BioCLIP filter keeps only insects and arachnids by default:
    for mammals, birds or other animals, turn that filter off (`filter_arthropods`), or BioCLIP
    can only answer with an insect or arachnid name.
-5. *Optional:* compare the names, per track ID:
+6. *Optional:* compare the names, per track ID:
 
    ```bash
    fauna-pulse-export compare --faunapulse path/to/sessions \
@@ -55,7 +60,8 @@ wherever `fauna-pulse-export` is written below.
    ```
 
    It prints how many track IDs both have and how often the two agree at each rank (kingdom to
-   species), and writes one row per track ID to `comparison.csv`.
+   species), and writes one row per track ID to `comparison.csv`. If the export was given
+   `--device-id`, give `compare` the same one.
 
 Options of `insect-detect`:
 
@@ -65,6 +71,7 @@ Options of `insect-detect`:
 | `--setting plant\|site\|habitat\|none` | Which field note becomes the session's *setting* in insect-detect-post (default `plant`). insect-detect-post can select tracks by setting during validation. |
 | `--no-location` | Leave the session's position out of the config file, for example before sharing the folder. |
 | `--overwrite` | Replace sessions that were exported to the same folder before. Without it they are refused. |
+| `--device-id NAME` | Device name for sessions that carry none, such as imported videos (the phone did not film them), for example the camera that did. Without it they are `unknown camera`. |
 
 ## Other kinds of FaunaPulse sessions
 
@@ -93,8 +100,8 @@ The folder layout and the metadata columns of the Insect Detect camera (insect-d
 
 | Column | From FaunaPulse |
 |---|---|
-| `device_id` | the phone model (`device.model` of the session's start record), as in `tracks_<pack>.csv`; `unknown camera` when the record has none, as for imported videos (insect-detect-post drops rows without one) |
-| `session_id` | the session folder name plus `_` and the session's random 4-character token (for example `plot1_k7x2`), so that two phones of the same model with the same folder name stay apart: insect-detect-post tells track IDs apart by phone model, session and track ID only |
+| `device_id` | the first of: a field of your own named `Device ID` in the session's field notes (case, spaces, `_` and `-` do not matter); FaunaLapse's phone ID (8 characters, for FaunaLapse imports); the phone model (`device.model`, as in `tracks_<pack>.csv`); `--device-id`; `unknown camera` (insect-detect-post drops rows without a device). Characters that file names cannot hold (`/ \ : * ? " < > \|`) become `-`, because insect-detect-post puts the name in folder names. The config's `device_id_source` says which one was used. |
+| `session_id` | the session folder name plus `_` and the session's random 4-character token (for example `plot1_k7x2`), so that two phones with the same device name and folder name stay apart: insect-detect-post tells track IDs apart by device, session and track ID only |
 | `timestamp` | the photo's moment, the phone's local time, six decimals; equal to the time in the file name |
 | `label`, `confidence` | the detector's class and confidence for that box |
 | `track_id` | FaunaPulse's track ID (live, or found afterwards in videos or photos) |
