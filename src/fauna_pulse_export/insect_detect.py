@@ -49,7 +49,7 @@ def clean_name_part(text: str, fallback: str) -> str:
     out = re.sub(r"[^A-Za-z0-9-]+", "-", text).strip("-")
     while _RESERVED.search(out):
         out = _RESERVED.sub("", out)
-    return out.strip("-") or fallback
+    return re.sub(r"-{2,}", "-", out).strip("-") or fallback  # "11T - check" -> "11T-check"
 
 
 @dataclass

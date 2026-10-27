@@ -10,9 +10,10 @@ the app (https://github.com/valentinitnelav/fauna-pulse):
   (`_IndexBuilder._apply`, `_addPhotoEntry`, `_readCapture`);
 - which file is read and which box is used: `lib/fauna_pulse/identification/crop_planner.dart`
   (`planFromIndex`);
-- phone model and session IDs: `lib/fauna_pulse/identification/identification_job.dart`
-  (the values written to `tracks_<pack>.csv`, so results can be joined); the device name the
-  export writes is in `device_id_of` (a "Device ID" field of the user's own comes first).
+- device name: `lib/fauna_pulse/models/field_notes.dart` (`deviceNameOf`, `phoneModelOf`; the
+  device_id of `tracks_<pack>.csv` since app round 335), here `device_id_of`; session ID: the
+  folder name, as `lib/fauna_pulse/identification/identification_job.dart` writes it, plus the
+  session token (`export_session_id`).
 
 The record dictionary is the app's `docs/DATA_GUIDE.md`. Two deliberate differences from the
 planner: every photo is kept (the planner keeps at most 10 per track ID for Identify), and a
@@ -23,7 +24,9 @@ out, because insect-detect-post would cut a crop where no animal was seen.
 from __future__ import annotations
 
 import json
+import math
 import re
+import string
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -300,36 +303,59 @@ DEVICE_ID_FIELD = "Device ID"
 # sorts the crops (pipeline_runner.py), so a typed name must not hold what file names cannot.
 _NOT_IN_FILE_NAMES = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
 
+# The spaces trimmed from names and ignored in field names. Spaces, letter case and number
+# notation are spelled out here and in the app's deviceNameOf, because Dart and Python treat some
+# characters differently (str.strip and Dart's trim, for example, disagree on the byte order mark).
+_SPACES = " \t\n\r\x0b\x0c\u00a0\ufeff"
+_FIELD_NAME_IGNORED = re.compile("[" + re.escape(_SPACES) + "_-]+")
+_ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
 
 def _plain(name) -> str:
-    return re.sub(r"[\s_-]+", "", str(name)).lower()
+    """A field name compared without spaces, "_", "-" and the case of A to Z."""
+    return _FIELD_NAME_IGNORED.sub("", str(name)).translate(_ASCII_LOWER)
+
+
+def _safe(name: str | None) -> str:
+    """[name] with what file names cannot hold as "-", and "-", "." and spaces dropped at the ends."""
+    return _NOT_IN_FILE_NAMES.sub("-", name or "").strip(" .-")
 
 
 def _text(v) -> str | None:
-    if v is None or isinstance(v, bool):  # a yes/no field is no name
+    """A record value that can be a name: text or a finite number, trimmed; None for anything else
+    (a yes/no field is no name) or empty text. A whole number is written without decimals (7.0 as
+    7, as a number field records it); the app writes numbers the same way."""
+    if isinstance(v, bool) or not isinstance(v, (str, int, float)):
         return None
-    if isinstance(v, float) and v.is_integer():
-        v = int(v)
-    return str(v).strip() or None
+    if isinstance(v, float):
+        if not math.isfinite(v):
+            return None
+        if v.is_integer():
+            v = int(v)
+    return str(v).strip(_SPACES) or None
 
 
 def phone_model_of(start: dict) -> str | None:
-    """Mirrors identification_job.dart: `device.model`, else `device_model` (the device_id of
-    tracks_<pack>.csv)."""
+    """Mirrors the app's `phoneModelOf`: `device.model`, else `device_model` (the phone_model of
+    tracks_<pack>.csv since app round 335, its device_id before)."""
     d = start.get("device")
     return _text(d.get("model") if isinstance(d, dict) else None) or _text(start.get("device_model"))
 
 
 def device_id_of(start: dict, fallback: str | None = None) -> tuple[str, str]:
-    """The device's name in the export and where it came from: the user's "Device ID" field, else
+    """The device's name in the export and where it came from: the first filled "Device ID" field, else
     FaunaLapse's phone ID (`field.phone_id`, 8 characters of Android's ID; always empty in
-    FaunaPulse), else the phone model, else [fallback] (--device-id), else UNKNOWN_DEVICE."""
+    FaunaPulse), else the phone model, else [fallback] (--device-id), else UNKNOWN_DEVICE.
+
+    Up to the fallback this is the app's `deviceNameOf` (lib/fauna_pulse/models/field_notes.dart,
+    since app round 335 the device_id of tracks_<pack>.csv); keep the two in sync. Both test the
+    same cases: tests/fixtures/device_name_cases.json, copied in the app's test/fauna_pulse/fixtures/.
+    """
     notes = start.get("field") if isinstance(start.get("field"), dict) else {}
     custom = notes.get("custom") if isinstance(notes.get("custom"), dict) else {}
-    own = next((_text(v) for k, v in custom.items() if _plain(k) == _plain(DEVICE_ID_FIELD)), None)
-    for name, source in ((own, "field " + DEVICE_ID_FIELD), (_text(notes.get("phone_id")), "phone ID"),
-                         (phone_model_of(start), "phone model"), (_text(fallback), "--device-id")):
-        name = _NOT_IN_FILE_NAMES.sub("-", name or "").strip(" .")
+    own = next((n for k, v in custom.items() if _plain(k) == _plain(DEVICE_ID_FIELD) and (n := _safe(_text(v)))), "")
+    for name, source in ((own, "field " + DEVICE_ID_FIELD), (_safe(_text(notes.get("phone_id"))), "phone ID"),
+                         (_safe(phone_model_of(start)), "phone model"), (_safe(_text(fallback)), "--device-id")):
         if name:
             return name, source
     return UNKNOWN_DEVICE, "none"

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from fauna_pulse_export.compare import compare, read_faunapulse, read_post  # noqa: E402
 from fauna_pulse_export.insect_detect import Export, Options, clean_name_part, write_session  # noqa: E402
-from fauna_pulse_export.session_reader import SessionError, read_session  # noqa: E402
+from fauna_pulse_export.session_reader import SessionError, device_id_of, read_session  # noqa: E402
 
 TZ = timezone(timedelta(hours=2))
 START = datetime(2026, 7, 14, 15, 30, 0, tzinfo=TZ)
@@ -226,6 +226,8 @@ class NamesAndTimesTest(unittest.TestCase):
         self.assertEqual(clean_name_part("Crop Master 5", "phone"), "Master-5")
         self.assertEqual(clean_name_part("crcropop", "phone"), "phone")
         self.assertEqual(clean_name_part("", "phone"), "phone")
+        self.assertEqual(clean_name_part("11T - check", "phone"), "11T-check")
+        self.assertEqual(clean_name_part("a-crop-b", "phone"), "a-b")
 
     def test_same_moment_on_two_phones_gets_distinct_timestamps(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -439,6 +441,14 @@ class DeviceNameTest(unittest.TestCase):
             "device_id,session_id,track_id,bioclip_family\nRedmi Note 9S,plot1,1,Apidae\n")
         fp, _ = read_faunapulse([d], None)
         self.assertEqual(list(fp), [("cam-03", "plot1_k7x2", 1)])
+
+    def test_shared_cases_with_the_app(self):
+        from fauna_pulse_export.session_reader import phone_model_of
+        cases = json.loads((Path(__file__).parent / "fixtures" / "device_name_cases.json").read_text())
+        for c in cases["cases"]:
+            want = c["device_id"] or "unknown camera"
+            self.assertEqual(device_id_of(c["start"])[0], want, c["why"])
+            self.assertEqual(phone_model_of(c["start"]) or "", c["phone_model"], c["why"])
 
     def test_device_id_option_reaches_compare(self):
         d = self.session("video", model=False)
