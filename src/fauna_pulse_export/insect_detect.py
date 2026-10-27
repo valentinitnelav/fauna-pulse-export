@@ -25,7 +25,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import __version__
 from .session_reader import Session, SessionError
@@ -94,17 +94,19 @@ def session_folder(out: Path, session: Session) -> Path:
 
 
 def earlier_exports(out: Path, session: Session) -> list[Path]:
-    """Folders in `out` that already hold this session: the same name, or the same recording
-    under an older name, for a session renamed after an export (insect-detect-post would
-    otherwise count its photos twice). Same recording = same start moment
+    """Folders in `out` that already hold this session: the same name under the same device, or
+    the same recording under another name or device folder (a session renamed after an export,
+    or a device name written differently by an older version of this tool); insect-detect-post
+    would otherwise count its photos twice. Same recording = same start moment
     (`start_of_session.session_id`, epoch ms) and same random session token: two phones can
     start in the same millisecond."""
     recording = (session.start.get("session_id"), session.start.get("file_token"))
+    own = out / clean_name_part(session.device_id, "phone") / "data"
     found = []
-    for d in sorted((out / clean_name_part(session.device_id, "phone") / "data").glob("*/*")):
+    for d in sorted(out.glob("*/data/*/*")):
         if not d.is_dir():
             continue
-        if d.name == session.session_id:
+        if d.name == session.session_id and d.parent.parent == own:
             found.append(d)
             continue
         for cfg in d.glob("*_config.json"):
@@ -137,6 +139,15 @@ def _place(src: Path, dst: Path, copy: bool) -> str:
             pass
     shutil.copy2(src, dst)
     return "copied"
+
+
+def _detector_model(session: Session) -> str | None:
+    """File name of the detector behind the boxes: for track IDs found afterwards the one of
+    "Find animals in videos/photos" (post_track_start.detection_settings), else the live one."""
+    det = (session.post_track_start or {}).get("detection_settings")
+    path = det.get("model") if session.track_source == "afterwards" and isinstance(det, dict) else None
+    path = path or session.start.get("model_path")
+    return PurePosixPath(str(path)).name if path else None
 
 
 def _config(session: Session, opts: Options) -> dict:
@@ -172,7 +183,7 @@ def _config(session: Session, opts: Options) -> dict:
             "track_source": session.track_source,
             "photo_step_s": keep.get("step_seconds", config.get("stepSeconds")),
             "photo_duration_s": keep.get("duration_seconds", config.get("durationSeconds")),
-            "detector_model": start.get("model_path"),
+            "detector_model": _detector_model(session),
             "field": field_notes,
             "exported_by": f"fauna-pulse-export {__version__}",
             "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),

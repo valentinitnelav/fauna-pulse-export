@@ -10,9 +10,11 @@ a YOLO classifier, sum up each track ID, and check the names by hand in its vali
 second command puts FaunaPulse's own names (from *Identify organisms* on the phone) and
 insect-detect-post's names side by side, per track ID.
 
-Status: version 0.1.0. Tested on small made-up sessions (`tests/`), and insect-detect-post's own
-file reader (v1.1.0) linked every exported row to its photo. Not yet run on real sessions through
-the whole insect-detect-post pipeline (cropping, BioCLIP, results).
+Status: version 0.1.0. Tested on small made-up sessions (`tests/`) and on three real sessions
+(videos imported into FaunaPulse: a bee, two deer, several bees on flowers) through the whole
+insect-detect-post v1.1.0 pipeline with BioCLIP 2: every exported row was matched to its photo,
+the boxes drawn by insect-detect-post sit on the animals, and `compare` joined every track ID.
+Not yet tried with live sessions or FaunaLapse imports on real data.
 
 ## What you need
 
@@ -42,7 +44,9 @@ wherever `fauna-pulse-export` is written below.
    screen (photos, rows, track IDs, anything left out and why), and `export_report_<time>.json`
    in the output folder keeps the same.
 4. In insect-detect-post, select `path/to/for_insect_detect` as the source directory and run the
-   pipeline as for camera data.
+   pipeline as for camera data. Its BioCLIP filter keeps only insects and arachnids by default:
+   for mammals, birds or other animals, turn that filter off (`filter_arthropods`), or BioCLIP
+   can only answer with an insect or arachnid name.
 5. *Optional:* compare the names, per track ID:
 
    ```bash
@@ -89,7 +93,7 @@ The folder layout and the metadata columns of the Insect Detect camera (insect-d
 
 | Column | From FaunaPulse |
 |---|---|
-| `device_id` | the phone model (`device.model` of the session's start record), as in `tracks_<pack>.csv`; `unknown phone` when the record has none (insect-detect-post drops rows without one) |
+| `device_id` | the phone model (`device.model` of the session's start record), as in `tracks_<pack>.csv`; `unknown camera` when the record has none, as for imported videos (insect-detect-post drops rows without one) |
 | `session_id` | the session folder name plus `_` and the session's random 4-character token (for example `plot1_k7x2`), so that two phones of the same model with the same folder name stay apart: insect-detect-post tells track IDs apart by phone model, session and track ID only |
 | `timestamp` | the photo's moment, the phone's local time, six decimals; equal to the time in the file name |
 | `label`, `confidence` | the detector's class and confidence for that box |
@@ -133,8 +137,14 @@ earlier export. The export only ever deletes folders it wrote itself.
   with the probability of the winning name weighted by its share of votes; the lists of possible
   names differ (FaunaPulse's name list vs insect-detect-post's GBIF region filter); and the two
   may stop at different ranks. The comparison counts agreement; it does not say which is right.
-- **Species names** are compared as text, ignoring upper case and extra spaces. Check on the first
-  real run that both write species the same way (genus and epithet).
+- **Species names** are compared as text, ignoring upper case and extra spaces; both programs
+  write genus and epithet (for example `Apis mellifera`).
+- **`pred` is not always at the same rank.** insect-detect-post gives `pred` at the rank chosen in
+  its settings (default species), FaunaPulse at the rank of its name list, so the two
+  probabilities can be for different things. Compare the per-rank columns
+  (`fp_<rank>`, `post_<rank>`, `agree_<rank>`).
+- **A track ID seen on one photo** lasts 0 s in insect-detect-post (first to last photo), so its
+  duration filter (off by default) removes it.
 - **High-res photos:** the boxes come from the detector frame that triggered the photo. When the
   fast photo saved with each high-res photo exists, that one is exported (its content matches the
   box); otherwise the high-res photo is used and a fast animal may have moved.

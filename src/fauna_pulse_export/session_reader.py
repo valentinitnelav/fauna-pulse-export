@@ -284,8 +284,9 @@ def _float(v) -> float | None:
 
 
 # insect-detect-post drops every row whose device_id is empty, so a session without a phone model
-# gets this name (compare.py maps the empty device_id of tracks_<pack>.csv to it too).
-UNKNOWN_DEVICE = "unknown phone"
+# gets this name (compare.py maps the empty device_id of tracks_<pack>.csv to it too). Imported
+# videos have none: the phone did not film them, so the camera is unknown.
+UNKNOWN_DEVICE = "unknown camera"
 
 
 def device_id_of(start: dict) -> str:

@@ -177,7 +177,8 @@ class TrackSourceTest(unittest.TestCase):
         start = start_record()
         del start["config"]  # imported-video sessions have no camera config: no live tracker
         log = [start, frame(t, track(9, jpeg=kept))]  # must be ignored
-        post = [{"type": "post_track_start", "run_id": 4, "keep_frames": {"step_seconds": 0.5, "duration_seconds": 30}},
+        post = [{"type": "post_track_start", "run_id": 4, "keep_frames": {"step_seconds": 0.5, "duration_seconds": 30},
+                 "detection_settings": {"model": "/data/user/0/app/files/models/det_256.tflite"}},
                 frame(t, track(1, jpeg=kept)),
                 {"type": "capture", "file": kept, "captured_at_ms": ms(t), "source": "video", "clip": "a.mp4", "pts_us": 3000000}]
         d = make_session(self.root, "video", log, [kept], post)
@@ -187,6 +188,7 @@ class TrackSourceTest(unittest.TestCase):
         entry = write_session(s, Export(self.root / "out"), Options())
         config = json.loads(next(Path(entry["folder"]).glob("*_config.json")).read_text())
         self.assertEqual(config["faunapulse"]["photo_step_s"], 0.5)
+        self.assertEqual(config["faunapulse"]["detector_model"], "det_256.tflite")
 
     def test_live_session_ignores_post_tracks(self):
         t = START + timedelta(seconds=3)
@@ -233,6 +235,7 @@ class NamesAndTimesTest(unittest.TestCase):
             a = make_session(root, "a", [start_record(), frame(t, track(1, jpeg=p))], [p])
             other = start_record()
             other["device"] = {"model": "Pixel 7"}
+            other["file_token"] = "q9w8"  # same start moment, another recording
             b = make_session(root, "b", [other, frame(t, track(1, jpeg=p))], [p])
             export = Export(root / "out")
             write_session(read_session(a), export, Options())
@@ -313,7 +316,7 @@ class ReviewFindingsTest(unittest.TestCase):
         start = start_record()
         del start["device"]
         s = read_session(self.session("nomodel", start))
-        self.assertEqual(s.device_id, "unknown phone")
+        self.assertEqual(s.device_id, "unknown camera")
 
     def test_same_folder_name_on_two_phones_of_one_model(self):
         a = self.session("plot1")
@@ -337,6 +340,17 @@ class ReviewFindingsTest(unittest.TestCase):
         new = write_session(read_session(renamed), Export(out), Options(overwrite=True))
         self.assertFalse(Path(old["folder"]).exists())
         self.assertTrue(Path(new["folder"]).exists())
+
+    def test_earlier_export_under_another_device_name_is_found(self):
+        out = self.root / "out"
+        old = Path(write_session(read_session(self.session("plot1")), Export(out), Options())["folder"])
+        moved = out / "unknown-phone" / old.relative_to(out).parts[1] / old.parent.name / old.name
+        moved.parent.mkdir(parents=True)
+        old.rename(moved)  # as written by a version that named the device differently
+        refused = write_session(read_session(self.root / "plot1"), Export(out), Options())
+        self.assertIn("already exported", refused["refused"])
+        write_session(read_session(self.root / "plot1"), Export(out), Options(overwrite=True))
+        self.assertFalse(moved.exists())
 
     def test_overwrite_never_deletes_a_foreign_folder(self):
         from fauna_pulse_export.insect_detect import _remove_export
@@ -372,7 +386,7 @@ class ReviewFindingsTest(unittest.TestCase):
     def test_numeric_session_id_from_post_still_joins(self):
         from fauna_pulse_export.compare import _key
         self.assertEqual(_key("Redmi Note 9S", "007", 1), _key("Redmi Note 9S", "7", 1))
-        self.assertEqual(_key("", "a", 1)[0], "unknown phone")
+        self.assertEqual(_key("", "a", 1)[0], "unknown camera")
 
 
 if __name__ == "__main__":
