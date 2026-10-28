@@ -10,6 +10,10 @@ a YOLO classifier, sum up each track ID, and check the names by hand in its vali
 second command puts FaunaPulse's own names (from *Identify organisms* on the phone) and
 insect-detect-post's names side by side, per track ID.
 
+**Experimental.** The tool exists to keep FaunaPulse data readable by insect-detect-post while
+both programs change. The commands, the files they write and their columns may still change
+between versions.
+
 More details:
 
 - [docs/EXPORT_FORMAT.md](docs/EXPORT_FORMAT.md): the folders and columns the export writes, how
@@ -91,12 +95,14 @@ saying so.
 - **Time-lapse or motion sessions recorded in FaunaPulse:** the same as FaunaLapse sessions,
   without the import.
 
-## Status: version 0.1.0.
+## Status: version 0.1.0, experimental.
 
 - Tested on small made-up sessions (`tests/`) and on three real sessions (videos imported into
   FaunaPulse: a bee, two deer, several bees on flowers) through the whole insect-detect-post
   v1.1.0 pipeline with BioCLIP 2. Every exported row was matched to its photo, the boxes drawn by
   insect-detect-post sit on the animals, and `compare` joined every track ID.
+- insect-detect-post refuses metadata files that are not unmodified camera output (since its
+  commit of 2026-10-27). An export of made-up sessions passed that check: no file was refused.
 
 ## Credits
 

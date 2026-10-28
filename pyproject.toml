@@ -1,15 +1,21 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fauna-pulse-export"
 dynamic = ["version"]
-description = "Turn FaunaPulse sessions into formats that other software reads (Insect Detect camera layout for insect-detect-post)"
+description = "Turn FaunaPulse sessions into formats that other software reads (Insect Detect camera layout for insect-detect-post); experimental"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "AGPL-3.0" }
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Valentin Ștefan" }]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/valentinitnelav/fauna-pulse-export"
+Issues = "https://github.com/valentinitnelav/fauna-pulse-export/issues"
 
 [project.scripts]
 fauna-pulse-export = "fauna_pulse_export.__main__:main"
